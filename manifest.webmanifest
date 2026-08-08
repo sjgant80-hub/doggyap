@@ -1,0 +1,14 @@
+{
+  "name": "doggyap — read the whole dog",
+  "short_name": "doggyap",
+  "description": "A multi-axis dog reader: tail, posture, ears, gaze, hackles, mouth and voice fused into one state read with a confidence score. States, never words. Runs entirely on your device.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#12100e",
+  "theme_color": "#12100e",
+  "orientation": "any",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

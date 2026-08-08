@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>doggyap · read the whole dog</title>
+<meta name="description" content="A multi-axis dog reader. Tail, posture, ears, gaze, hackles, mouth and voice fused into one state read with a confidence score. States, never words. Runs entirely on your device.">
+<meta name="theme-color" content="#12100e">
+<link rel="manifest" href="manifest.webmanifest">
+<style>
+  :root{
+    --ground:#faf7f2; --ink:#17140f; --dim:#6d6459; --line:#e3ddd2; --panel:#fff;
+    --accent:#8a5a2b;
+    --relaxed:#3f7d4e; --play:#2b7a86; --alert:#a8791b; --aroused:#b3591f; --distress:#7a4c8f; --threat:#a32d22;
+    --mono:ui-monospace,"SF Mono","Cascadia Mono",Menlo,Consolas,monospace;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{ --ground:#12100e; --ink:#f0ebe3; --dim:#9a9186; --line:#2c2721; --panel:#1b1815;
+           --accent:#d09a5e;
+           --relaxed:#6fc286; --play:#5fc0cf; --alert:#e0b34a; --aroused:#f0894a; --distress:#b98fd0; --threat:#f0685a; }
+  }
+  :root[data-theme="light"]{ --ground:#faf7f2; --ink:#17140f; --dim:#6d6459; --line:#e3ddd2; --panel:#fff; --accent:#8a5a2b;
+    --relaxed:#3f7d4e; --play:#2b7a86; --alert:#a8791b; --aroused:#b3591f; --distress:#7a4c8f; --threat:#a32d22; }
+  :root[data-theme="dark"]{ --ground:#12100e; --ink:#f0ebe3; --dim:#9a9186; --line:#2c2721; --panel:#1b1815; --accent:#d09a5e;
+    --relaxed:#6fc286; --play:#5fc0cf; --alert:#e0b34a; --aroused:#f0894a; --distress:#b98fd0; --threat:#f0685a; }
+
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);
+            -webkit-text-size-adjust:100%}
+  body{max-width:760px;margin:0 auto;padding:0 14px 40px;line-height:1.55}
+
+  header{padding:18px 0 12px;border-bottom:1px solid var(--line)}
+  h1{margin:0;font-size:19px;letter-spacing:.02em}
+  h1 b{color:var(--accent)}
+  .tag{font:12px/1.5 var(--mono);color:var(--dim);margin-top:4px}
+
+  /* ── the read ─────────────────────────────────────────────────────────── */
+  .read{margin:16px 0;border:1px solid var(--line);border-radius:14px;background:var(--panel);overflow:hidden}
+  .state{padding:16px 18px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;
+         border-left:6px solid var(--dim);transition:border-color .25s}
+  .state b{font-size:30px;font-weight:650;letter-spacing:-.02em;line-height:1.1}
+  .state .bands{font:12px/1.5 var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.08em}
+  .state[data-s="relaxed"]{border-left-color:var(--relaxed)} .state[data-s="relaxed"] b{color:var(--relaxed)}
+  .state[data-s="play"]{border-left-color:var(--play)}       .state[data-s="play"] b{color:var(--play)}
+  .state[data-s="alert"]{border-left-color:var(--alert)}     .state[data-s="alert"] b{color:var(--alert)}
+  .state[data-s="aroused"]{border-left-color:var(--aroused)} .state[data-s="aroused"] b{color:var(--aroused)}
+  .state[data-s="distress"]{border-left-color:var(--distress)} .state[data-s="distress"] b{color:var(--distress)}
+  .state[data-s="threat-warning"]{border-left-color:var(--threat)} .state[data-s="threat-warning"] b{color:var(--threat)}
+
+  .meter{height:6px;background:var(--line)}
+  .meter i{display:block;height:100%;background:var(--accent);transition:width .25s}
+  .detail{padding:12px 18px;font-size:14px;display:grid;gap:8px}
+  .detail .row{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+  .detail .k{font:11px/1.6 var(--mono);text-transform:uppercase;letter-spacing:.09em;color:var(--dim);min-width:88px}
+  .warn{background:color-mix(in srgb,var(--alert) 12%,transparent);border-top:1px solid var(--line);
+        padding:11px 18px;font-size:13.5px}
+  .vet{background:color-mix(in srgb,var(--distress) 14%,transparent);border-top:1px solid var(--line);
+       padding:11px 18px;font-size:13.5px}
+
+  /* ── axes ─────────────────────────────────────────────────────────────── */
+  h2{font:11px/1 var(--mono);text-transform:uppercase;letter-spacing:.13em;color:var(--dim);
+     margin:26px 0 10px;font-weight:600}
+  .axis{margin-bottom:14px}
+  .axis .name{font-size:13px;font-weight:650;margin-bottom:5px;display:flex;gap:8px;align-items:baseline}
+  .axis .name em{font:10px/1 var(--mono);font-style:normal;letter-spacing:.06em;text-transform:uppercase;
+                 color:var(--dim);border:1px solid var(--line);border-radius:99px;padding:3px 6px}
+  .axis .name em.m{color:var(--accent);border-color:currentColor}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .chips button{font:13px var(--sans);color:var(--ink);background:var(--panel);border:1px solid var(--line);
+                border-radius:99px;padding:7px 12px;cursor:pointer;min-height:38px}
+  .chips button[aria-pressed="true"]{background:var(--ink);color:var(--ground);border-color:var(--ink)}
+  .chips button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  video{width:100%;border-radius:12px;background:#000;display:block;aspect-ratio:4/3;object-fit:cover}
+  .cam{display:grid;gap:8px}
+  .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .btn{font:14px var(--sans);color:var(--ink);background:var(--panel);border:1px solid var(--line);
+       border-radius:10px;padding:9px 14px;cursor:pointer;min-height:42px}
+  .btn:hover{border-color:var(--accent)}
+  .btn.on{background:var(--accent);color:var(--ground);border-color:var(--accent)}
+  .btn:disabled{opacity:.45;cursor:default}
+  .live{font:11px/1 var(--mono);color:var(--dim);letter-spacing:.06em}
+
+  .strip{display:flex;gap:2px;height:34px;align-items:flex-end;margin-top:8px;overflow-x:auto;padding-bottom:2px}
+  .strip i{flex:0 0 5px;border-radius:1px;background:var(--dim);min-height:5px}
+  .strip i[data-s="relaxed"]{background:var(--relaxed)} .strip i[data-s="play"]{background:var(--play)}
+  .strip i[data-s="alert"]{background:var(--alert)}     .strip i[data-s="aroused"]{background:var(--aroused)}
+  .strip i[data-s="distress"]{background:var(--distress)} .strip i[data-s="threat-warning"]{background:var(--threat)}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font:10px/1.4 var(--mono);text-transform:uppercase;letter-spacing:.09em;color:var(--dim)}
+  .scroll{overflow-x:auto}
+  .empty{color:var(--dim);font-size:13.5px;padding:6px 0}
+  input[type=text]{font:14px var(--sans);color:var(--ink);background:var(--panel);border:1px solid var(--line);
+                   border-radius:10px;padding:9px 11px;width:100%;min-height:42px}
+  .err{color:var(--threat);font-size:13px;margin-top:6px}
+  footer{margin-top:34px;padding-top:16px;border-top:1px solid var(--line);font-size:13px;color:var(--dim)}
+  footer p{margin:.6em 0}
+  code{font:12.5px var(--mono);background:color-mix(in srgb,var(--ink) 7%,transparent);padding:1px 5px;border-radius:4px}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>doggy<b>ap</b> · read the whole dog, not just the yap</h1>
+  <div class="tag">multi-axis · states not words · runs on your device, nothing uploaded</div>
+</header>
+
+<div class="read">
+  <div class="state" id="state" data-s=""><b id="stateName">—</b><span class="bands" id="bands">nothing observed yet</span></div>
+  <div class="meter"><i id="meter" style="width:0%"></i></div>
+  <div class="detail">
+    <div class="row"><span class="k">confidence</span><span id="conf">—</span></div>
+    <div class="row"><span class="k">driven by</span><span id="drivers">—</span></div>
+    <div class="row"><span class="k">disagreeing</span><span id="conflict">—</span></div>
+    <div class="row" id="learnedRow" hidden><span class="k">your dog</span><span id="learned">—</span></div>
+  </div>
+  <div class="warn" id="warn" hidden></div>
+  <div class="vet" id="vetNote" hidden></div>
+</div>
+
+<h2>the dog</h2>
+<div class="cam">
+  <video id="cam" playsinline muted></video>
+  <div class="bar">
+    <button class="btn" id="camBtn">start camera</button>
+    <button class="btn" id="micBtn">start microphone</button>
+    <span class="live" id="liveInfo">camera and microphone are optional — you can tap the axes by hand</span>
+  </div>
+</div>
+
+<h2>axes · tap what you can see</h2>
+<div id="axes"></div>
+
+<h2>this session</h2>
+<div class="strip" id="strip"></div>
+<div class="row" style="margin-top:8px"><span class="live" id="tl">no frames yet</span></div>
+<div class="bar" style="margin-top:10px">
+  <button class="btn" id="markBtn">record this read</button>
+  <button class="btn" id="clearBtn">clear session</button>
+</div>
+
+<h2>your dog's own signals</h2>
+<p class="empty" id="profileNote">Patterns that keep recurring get offered here. The tool spots the repetition; you say what was happening. It never guesses the meaning.</p>
+<div class="scroll"><table id="candTable" hidden>
+  <thead><tr><th>seen</th><th>pattern</th><th>reads as</th><th>name it</th></tr></thead>
+  <tbody id="cands"></tbody>
+</table></div>
+<div class="scroll"><table id="repTable" hidden>
+  <thead><tr><th>times</th><th>name</th><th>context</th></tr></thead>
+  <tbody id="rep"></tbody>
+</table></div>
+<div class="err" id="labelErr"></div>
+
+<footer>
+  <p><b>What this is.</b> Roughly a fifth of how a dog communicates is sound. The rest is body — tail, posture,
+  ears, gaze, hackles, mouth. Every axis votes, the votes are fused, and when they disagree that disagreement is
+  shown rather than smoothed away. A stiff high wag with a hard stare and forward weight is a warning, not joy,
+  and only the other axes can tell you which.</p>
+  <p><b>What it is not.</b> It produces no words. There is no sentence, no caption, nothing put in the dog's
+  mouth — the output is a state from a fixed set, a confidence score, and the axes that drove it. It is not a
+  diagnosis: readings consistent with pain raise a vet flag and nothing more. It is a reader, not a mind.</p>
+  <p><b>Measured versus observed.</b> Voice and tail motion are measured from the microphone and camera and are
+  marked <em>measured</em>. Tail height, ears, gaze, hackles, posture and mouth need a dog-pose keypoint model
+  that this does not ship, so you tap those yourself. The fusion — the part that catches the misreads — works
+  the same either way.</p>
+  <p>Everything stays on this device: the profile is in local storage, no video or audio leaves the browser, and
+  it works offline. Kernel: <code>doggyap.mjs</code>, mutation-gated, 56 tests.</p>
+</footer>
+
+<script type="module">
+import {
+  vocabulary, read, timeline, makeProfile, observe, newSignals, label, repertoire,
+  profileToJSON, profileFromJSON, signature,
+} from './doggyap.mjs';
+
+const $ = (id) => document.getElementById(id);
+const VOCAB = vocabulary();
+const readings = {};
+let frames = [];
+let profile = load();
+
+// ── the axis chips, built from the kernel's own closed vocabulary ────────────────────────────────
+// The UI cannot invent a reading, because it never names one: it renders exactly what the kernel
+// declares and hands those strings straight back.
+const LABELS = {
+  voice: 'voice', tail: 'tail', posture: 'posture', ears: 'ears', gaze: 'gaze', hackles: 'hackles', mouth: 'mouth',
+};
+const axesEl = $('axes');
+for (const [axis, spec] of Object.entries(VOCAB)) {
+  const wrap = document.createElement('div');
+  wrap.className = 'axis';
+  const measured = spec.measured === true ? 'measured' : spec.measured === 'partial' ? 'part measured' : 'observed';
+  wrap.innerHTML = `<div class="name">${LABELS[axis]} <em class="${spec.measured ? 'm' : ''}">${measured}</em></div>`;
+  const chips = document.createElement('div');
+  chips.className = 'chips';
+  for (const r of spec.readings) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = r.replace(/-/g, ' ');
+    b.setAttribute('aria-pressed', 'false');
+    b.onclick = () => { setReading(axis, readings[axis] === r ? null : r); };
+    b.dataset.axis = axis; b.dataset.reading = r;
+    chips.appendChild(b);
+  }
+  wrap.appendChild(chips);
+  axesEl.appendChild(wrap);
+}
+
+function setReading(axis, reading) {
+  if (reading) readings[axis] = reading; else delete readings[axis];
+  for (const b of axesEl.querySelectorAll(`button[data-axis="${axis}"]`)) {
+    b.setAttribute('aria-pressed', String(b.dataset.reading === reading));
+  }
+  render();
+}
+
+// ── the read ────────────────────────────────────────────────────────────────────────────────────
+function render() {
+  const r = read(readings, { profile });
+  $('state').dataset.s = r.state || '';
+  $('stateName').textContent = r.state ? r.state.replace('-', ' ') : '—';
+  $('bands').textContent = r.state ? `${r.arousal} arousal · ${r.valence}` : 'nothing observed yet';
+  $('meter').style.width = `${Math.round(r.confidence * 100)}%`;
+  $('conf').textContent = r.state
+    ? `${Math.round(r.confidence * 100)}% — ${r.axes} ax${r.axes === 1 ? 'is' : 'es'} read, ${Math.round(r.agreement * 100)}% agreeing`
+    : '—';
+  $('drivers').textContent = r.drivers.length ? r.drivers.join(', ') : '—';
+  $('conflict').textContent = r.conflict.length
+    ? r.conflict.map(c => `${c.axis} (${c.reading.replace(/-/g, ' ')})`).join(', ')
+    : 'nothing';
+
+  $('learnedRow').hidden = !r.learned;
+  if (r.learned) $('learned').textContent = r.learned.context ? `${r.learned.name} — ${r.learned.context}` : r.learned.name;
+
+  // Say WHY it wants context. "You have only read the tail" is fixable; "the tail and the face
+  // disagree" is not, and they should never look like the same message.
+  const why = [];
+  if (r.flags) {
+    if (r.flags.dissent) why.push('the axes disagree — look again before you act on this');
+    if (r.flags.tooFewAxes) why.push('too few axes read');
+    else if (r.flags.lowConfidence && !r.flags.dissent) why.push('thin agreement — read more of the dog');
+  }
+  $('warn').hidden = !r.checkContext || !r.state;
+  $('warn').textContent = why.length ? `check the context: ${why.join('; ')}` : '';
+
+  $('vetNote').hidden = !r.vet.flag;
+  if (r.vet.flag) $('vetNote').textContent = r.vet.note;
+  return r;
+}
+
+// ── the session strip ───────────────────────────────────────────────────────────────────────────
+function mark() {
+  const r = read(readings, { profile });
+  if (!r.state) return;
+  frames.push({ at: frames.length, state: r.state });
+  observe(profile, readings, { at: new Date().toISOString() });
+  save();
+  drawStrip();
+  drawProfile();
+}
+
+function drawStrip() {
+  const el = $('strip');
+  el.innerHTML = '';
+  const H = { relaxed: 30, play: 45, alert: 60, aroused: 78, distress: 78, 'threat-warning': 100 };
+  for (const f of frames) {
+    const i = document.createElement('i');
+    i.dataset.s = f.state;
+    i.style.height = `${H[f.state] || 20}%`;
+    i.title = f.state;
+    el.appendChild(i);
+  }
+  const tl = timeline(frames);
+  $('tl').textContent = frames.length
+    ? `${tl.frames} reads · ${tl.direction}${tl.peak ? ` · peak ${tl.peak.state.replace('-', ' ')}` : ''}` +
+      (tl.escalations.length ? ` · ${tl.escalations.length} step${tl.escalations.length === 1 ? '' : 's'} up` : '')
+    : 'no frames yet';
+}
+
+// ── the per-dog layer ───────────────────────────────────────────────────────────────────────────
+function drawProfile() {
+  const cands = newSignals(profile, { threshold: 4 });
+  const table = $('candTable'), body = $('cands');
+  body.innerHTML = '';
+  table.hidden = cands.length === 0;
+  for (const c of cands) {
+    const tr = document.createElement('tr');
+    const pattern = Object.entries(c.readings).map(([a, v]) => `${a}: ${v.replace(/-/g, ' ')}`).join(', ');
+    tr.innerHTML = `<td>${c.count}×</td><td>${pattern}</td><td>${c.fused.state || '—'}</td>`;
+    const td = document.createElement('td');
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = 'what was happening? e.g. at the door before a walk';
+    input.onkeydown = (e) => {
+      if (e.key !== 'Enter') return;
+      try {
+        // The guard THROWS on anything that reads as speech. Surfaced here as the error it is —
+        // a label is a context, never something the dog "said".
+        label(profile, c.sig, input.value.trim(), { context: null });
+        $('labelErr').textContent = '';
+        save(); drawProfile(); render();
+      } catch (err) { $('labelErr').textContent = err.message; }
+    };
+    td.appendChild(input);
+    tr.appendChild(td);
+    body.appendChild(tr);
+  }
+
+  const rep = repertoire(profile);
+  $('repTable').hidden = rep.length === 0;
+  $('rep').innerHTML = rep.map(x =>
+    `<td>${x.count}×</td><td>${escapeHtml(x.name)}</td><td>${escapeHtml(x.context || '—')}</td>`)
+    .map(r => `<tr>${r}</tr>`).join('');
+
+  $('profileNote').textContent = cands.length || rep.length
+    ? `${profile.observations} reads recorded · ${profile.patterns.size} distinct patterns · ${rep.length} named`
+    : 'Patterns that keep recurring get offered here. The tool spots the repetition; you say what was happening. It never guesses the meaning.';
+}
+
+const escapeHtml = (s) => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function save() { try { localStorage.setItem('doggyap.profile', JSON.stringify(profileToJSON(profile))); } catch {} }
+function load() {
+  try { const raw = localStorage.getItem('doggyap.profile'); if (raw) return profileFromJSON(JSON.parse(raw)); } catch {}
+  return makeProfile('your dog');
+}
+
+$('markBtn').onclick = mark;
+$('clearBtn').onclick = () => { frames = []; drawStrip(); };
+
+// ── MEASURED · voice ────────────────────────────────────────────────────────────────────────────
+//
+// Honest about what a microphone can and cannot tell you. Loudness and dominant pitch are real
+// measurements. The mapping from those to a named vocalisation is a suggestion, so it fills the chip
+// in and you can override it with a tap — the kernel never sees anything you did not agree to.
+let audioCtx = null, analyser = null, micOn = false;
+
+$('micBtn').onclick = async () => {
+  if (micOn) return;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const src = audioCtx.createMediaStreamSource(stream);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 2048;
+    src.connect(analyser);
+    micOn = true;
+    $('micBtn').classList.add('on');
+    $('micBtn').textContent = 'microphone on';
+    listen();
+  } catch (e) { $('liveInfo').textContent = 'microphone unavailable: ' + e.message; }
+};
+
+function listen() {
+  const buf = new Float32Array(analyser.fftSize);
+  let quiet = 0;
+  const tick = () => {
+    if (!micOn) return;
+    analyser.getFloatTimeDomainData(buf);
+    let rms = 0;
+    for (let i = 0; i < buf.length; i++) rms += buf[i] * buf[i];
+    rms = Math.sqrt(rms / buf.length);
+
+    if (rms < 0.02) {
+      if (++quiet > 30 && readings.voice !== 'silent') setReading('voice', 'silent');
+    } else {
+      quiet = 0;
+      const hz = pitch(buf, audioCtx.sampleRate);
+      // Coarse and deliberately so: a low rumble, a high yip, and everything between is left to you.
+      const guess = hz > 0 && hz < 250 ? 'growl-low'
+        : hz >= 250 && hz < 500 ? 'bark-sharp'
+        : hz >= 500 ? 'yip-play' : null;
+      if (guess && readings.voice !== guess) setReading('voice', guess);
+      $('liveInfo').textContent = `voice measured · ${Math.round(rms * 1000) / 10} loud · ${hz > 0 ? Math.round(hz) + ' Hz' : 'no clear pitch'}`;
+    }
+    requestAnimationFrame(tick);
+  };
+  tick();
+}
+
+/** Autocorrelation. Returns 0 when there is no clear periodicity rather than guessing one. */
+function pitch(buf, rate) {
+  const n = buf.length;
+  let best = -1, bestOff = -1;
+  const from = Math.floor(rate / 1200), to = Math.floor(rate / 60);
+  for (let off = from; off < to; off++) {
+    let corr = 0;
+    for (let i = 0; i < n - off; i++) corr += buf[i] * buf[i + off];
+    corr /= (n - off);
+    if (corr > best) { best = corr; bestOff = off; }
+  }
+  return best > 0.002 && bestOff > 0 ? rate / bestOff : 0;
+}
+
+// ── MEASURED · tail motion ──────────────────────────────────────────────────────────────────────
+//
+// Frame differencing over the lower-right of the frame gives real numbers: how much motion there is
+// and how fast it reverses. That is wag RATE and amplitude, genuinely measured. It is NOT tail
+// height, which needs keypoints this does not have — so the suggestion only ever chooses between the
+// stiff and loose readings at a height you set, and it says so.
+let camOn = false, video = $('cam'), work = document.createElement('canvas'), prev = null;
+
+$('camBtn').onclick = async () => {
+  if (camOn) return;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+    video.srcObject = stream;
+    await video.play();
+    camOn = true;
+    $('camBtn').classList.add('on');
+    $('camBtn').textContent = 'camera on';
+    work.width = 96; work.height = 72;
+    watch();
+  } catch (e) { $('liveInfo').textContent = 'camera unavailable: ' + e.message; }
+};
+
+function watch() {
+  const ctx = work.getContext('2d', { willReadFrequently: true });
+  const recent = [];
+  const tick = () => {
+    if (!camOn) return;
+    ctx.drawImage(video, 0, 0, work.width, work.height);
+    const cur = ctx.getImageData(0, 0, work.width, work.height).data;
+    if (prev) {
+      let energy = 0, cx = 0, mass = 0;
+      for (let p = 0, px = 0; p < cur.length; p += 4, px++) {
+        const d = Math.abs(cur[p] - prev[p]) + Math.abs(cur[p + 1] - prev[p + 1]) + Math.abs(cur[p + 2] - prev[p + 2]);
+        if (d > 40) { energy++; cx += px % work.width; mass++; }
+      }
+      const centroid = mass ? cx / mass : null;
+      recent.push({ energy: energy / (work.width * work.height), centroid });
+      if (recent.length > 45) recent.shift();
+
+      // reversals of the motion centroid ≈ wag rate; spread of the centroid ≈ amplitude
+      let reversals = 0, dir = 0, min = Infinity, max = -Infinity;
+      for (let i = 1; i < recent.length; i++) {
+        const a = recent[i - 1].centroid, b = recent[i].centroid;
+        if (a == null || b == null) continue;
+        min = Math.min(min, b); max = Math.max(max, b);
+        const d = Math.sign(b - a);
+        if (d !== 0 && dir !== 0 && d !== dir) reversals++;
+        if (d !== 0) dir = d;
+      }
+      const amp = max > min ? (max - min) / work.width : 0;
+      const moving = recent.length > 20 && recent[recent.length - 1].energy > 0.004;
+      if (moving) {
+        $('liveInfo').textContent = `motion measured · ${reversals} reversals · amplitude ${Math.round(amp * 100)}%`;
+        // Fast reversals over a narrow arc reads as stiff; slower over a wide arc reads as loose.
+        // It picks between STIFF and LOOSE only. Height is yours to set — this cannot see it.
+        const stiff = reversals >= 8 && amp < 0.18;
+        const loose = reversals >= 3 && amp >= 0.18;
+        const tailNow = readings.tail || '';
+        if (stiff && !tailNow.includes('stiff')) setReading('tail', 'high-stiff-wag');
+        else if (loose && !tailNow.includes('loose')) setReading('tail', 'loose-wide-wag');
+      }
+    }
+    prev = cur;
+    setTimeout(() => requestAnimationFrame(tick), 60);
+  };
+  tick();
+}
+
+// ── theme toggle honours the OS but lets the root override win ──────────────────────────────────
+drawStrip(); drawProfile(); render();
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
