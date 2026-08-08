@@ -282,7 +282,11 @@ function drawStrip() {
 
 // ── the per-dog layer ───────────────────────────────────────────────────────────────────────────
 function drawProfile() {
-  const cands = newSignals(profile, { threshold: 4 });
+  // minContexts 0 deliberately. The kernel can require a pattern to have appeared in several
+  // DIFFERENT situations before offering it, which is the right default for an API — but this page
+  // collects the context at LABELLING time, not at observation time, which is the honest order: you
+  // are asked what was happening only once there is something worth asking about.
+  const cands = newSignals(profile, { threshold: 4, minContexts: 0 });
   const table = $('candTable'), body = $('cands');
   body.innerHTML = '';
   table.hidden = cands.length === 0;
