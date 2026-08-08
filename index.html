@@ -149,7 +149,7 @@
   <tbody id="cands"></tbody>
 </table></div>
 <div class="scroll"><table id="repTable" hidden>
-  <thead><tr><th>times</th><th>name</th><th>context</th></tr></thead>
+  <thead><tr><th>times</th><th>what was happening</th></tr></thead>
   <tbody id="rep"></tbody>
 </table></div>
 <div class="err" id="labelErr"></div>
@@ -315,12 +315,10 @@ function drawProfile() {
 
   const rep = repertoire(profile);
   $('repTable').hidden = rep.length === 0;
-  $('rep').innerHTML = rep.map(x =>
-    `<td>${x.count}×</td><td>${escapeHtml(x.name)}</td><td>${escapeHtml(x.context || '—')}</td>`)
-    .map(r => `<tr>${r}</tr>`).join('');
+  $('rep').innerHTML = rep.map(x => `<tr><td>${x.count}×</td><td>${escapeHtml(x.name)}</td></tr>`).join('');
 
   $('profileNote').textContent = cands.length || rep.length
-    ? `${profile.observations} reads recorded · ${profile.patterns.size} distinct patterns · ${rep.length} named`
+    ? `${profile.observations} reads · ${profile.patterns.size} distinct pattern${profile.patterns.size === 1 ? '' : 's'} · ${rep.length} named`
     : 'Patterns that keep recurring get offered here. The tool spots the repetition; you say what was happening. It never guesses the meaning.';
 }
 
